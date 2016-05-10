@@ -1,3 +1,18 @@
+var MINI_CAP_PORT = 1717;
+var MINI_TOUCH_PORT = 1111;
+
+var exec = require('child_process').exec;
+var util = require('util'),
+    colors = require('colors'),
+    spawn = require('child_process').spawn,
+    state = {
+        'success': ['success', 'D\/DroidGap', 'D\/CordovaLog'],
+        'error': ['error', 'E\/'],
+        'warning': ['warning', 'W\/Web Console'],
+        'info': ['info']
+    },
+    logcat = spawn('adb', ['logcat']);
+
 var socket;
 var minicap;
 var minitouch;
@@ -28,6 +43,39 @@ var events = {
     }
 };
 
+var parseStdout = function(data, _class) {
+    data.toString().split('\n').forEach(function(line) {
+        if(line != '') {
+            var type = ['info'];
+            if(state.hasOwnProperty(_class)) {
+                type.push(_class);
+            } else {
+                Object.keys(state).forEach(function(k) {
+                    if(util.isArray(state[k])) {
+                        state[k].forEach(function(rx) {
+                            var r = new RegExp(rx);
+                            if(r.test(line)) {
+                                type.push(k);
+                            }
+                        });
+                    }
+                });
+            }
+
+            if(type.indexOf('error') >= 0) {
+                console.log(line.red.bold);
+            } else if(type.indexOf('warning') >= 0) {
+                console.log(line.yellow.bold);
+            } else if(type.indexOf('success') >= 0) {
+                console.log(line.green.bold);
+            } else {
+                console.log(line.blue.bold);
+            }
+        }
+    });
+};
+
+
 function convert_x(x, canvas_w) {
     var _x = Math.round(x * (max_width / canvas_w));
 
@@ -55,11 +103,23 @@ function handleMiniTouchData(data) {
 }
 
 exports.init = function (net, out, s) {
+    exec("run_touch.sh", function(error, stdout, stderr) {
+    });
+
+    exec("run_cap.sh -P 1280x720@853x480/90", function(error, stdout, stderr) {
+    });
+
+    exec("adb forward tcp:1717 localabstract:minicap", function(error, stdout, stderr) {
+    });
+
+    exec("adb forward tcp:1111 localabstract:minitouch", function(error, stdout, stderr) {
+    });
+
     s.emit('connected');
     socket = out;
 
     minicap = net.connect({
-        port: 1717
+        port: MINI_CAP_PORT
     });
 
     var readBannerBytes = 0;
@@ -198,7 +258,7 @@ exports.init = function (net, out, s) {
     minicap.on('readable', handleMiniCap);
 
     minitouch = net.connect({
-        port: 1111
+        port: MINI_TOUCH_PORT
     });
     minitouch.on('data', handleMiniTouchData);
 
@@ -207,6 +267,14 @@ exports.init = function (net, out, s) {
             s.on(key, events[key]);
         }
     }
+
+    logcat.stdout.on('data', function(data){parseStdout(data);});
+
+    logcat.stderr.on('data', function(data){parseStdout(data, 'error');});
+
+    logcat.on('exit', function (code) {
+        logcat = spawn('adb', ['logcat']);
+    });
 
     s.on('disconnect', function () {
         if (minicap != null) {

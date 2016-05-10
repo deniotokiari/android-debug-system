@@ -4,12 +4,10 @@ var canvas;
 var g;
 var events = {
     connected: function () {
-        console.log("connected");
+
     },
     screen: function (data) {
-        console.log("data: " + data);
-
-        var blob = new Blob([data], {type: 'image/jpeg'})
+        var blob = new Blob([data], {type: 'image/jpeg'});
         var URL = window.URL || window.webkitURL;
         var img = new Image();
 
